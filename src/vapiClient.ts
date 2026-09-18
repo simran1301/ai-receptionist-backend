@@ -59,3 +59,70 @@ export async function provisionPhoneNumber(
     throw err;
   }
 }
+
+/**
+ * Lists all phone numbers provisioned in the Vapi account.
+ */
+export async function listPhoneNumbers(): Promise<Array<{ id: string; number: string; assistantId?: string }>> {
+  const res = await axios.get(`${VAPI_BASE}/phone-number`, {
+    headers: authHeaders(),
+  });
+  return res.data || [];
+}
+
+/**
+ * Releases a phone number from Vapi. Accepts either a Vapi Phone Number ID or a phone number string (e.g. "+15514441061").
+ */
+export async function releasePhoneNumber(phoneNumberOrId: string): Promise<{ released: boolean; id: string; number?: string }> {
+  const cleanedTarget = phoneNumberOrId.replace(/\D/g, "");
+  const allNumbers = await listPhoneNumbers();
+
+  // Match by exact ID or by trailing digits of phone number
+  const matched = allNumbers.find(
+    (n) =>
+      n.id === phoneNumberOrId ||
+      (cleanedTarget.length >= 7 && (n.number || "").replace(/\D/g, "").endsWith(cleanedTarget.slice(-10)))
+  );
+
+  const targetId = matched ? matched.id : phoneNumberOrId;
+  const targetNum = matched ? matched.number : phoneNumberOrId;
+
+  try {
+    // Unlink assistant first to ensure clean detachment
+    try {
+      await axios.patch(
+        `${VAPI_BASE}/phone-number/${targetId}`,
+        { assistantId: null },
+        { headers: authHeaders() }
+      );
+    } catch {
+      // Non-fatal if already detached
+    }
+
+    // Delete/release number from Vapi
+    await axios.delete(`${VAPI_BASE}/phone-number/${targetId}`, {
+      headers: authHeaders(),
+    });
+
+    return { released: true, id: targetId, number: targetNum };
+  } catch (err: any) {
+    console.error(`Failed to delete Vapi phone number ${targetId}:`, err.response?.data || err.message);
+    throw new Error(`Failed to release phone number ${targetNum}: ${err.response?.data?.message || err.message}`);
+  }
+}
+
+/**
+ * Deletes an assistant from Vapi by assistant ID.
+ */
+export async function deleteAssistant(assistantId: string): Promise<boolean> {
+  try {
+    await axios.delete(`${VAPI_BASE}/assistant/${assistantId}`, {
+      headers: authHeaders(),
+    });
+    return true;
+  } catch (err: any) {
+    console.warn(`Failed to delete Vapi assistant ${assistantId}:`, err.response?.data || err.message);
+    return false;
+  }
+}
+

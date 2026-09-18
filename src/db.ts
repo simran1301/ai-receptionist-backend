@@ -60,3 +60,52 @@ export async function saveCallReport(
   });
   if (error) throw error;
 }
+
+export async function findCustomer(filter: { id?: string; phone?: string; companyName?: string }) {
+  try {
+    let query = client().from("customers").select("*");
+    if (filter.id) {
+      query = query.eq("id", filter.id);
+    } else if (filter.phone) {
+      const clean = filter.phone.replace(/\D/g, "");
+      query = query.ilike("phone_number", `%${clean.slice(-10)}%`);
+    } else if (filter.companyName) {
+      query = query.ilike("company_name", `%${filter.companyName}%`);
+    }
+    const { data, error } = await query.limit(1);
+    if (error) {
+      console.warn("Supabase findCustomer error:", error.message);
+      return null;
+    }
+    return data && data.length > 0 ? data[0] : null;
+  } catch (err: any) {
+    console.warn("Supabase findCustomer exception:", err?.message);
+    return null;
+  }
+}
+
+export async function cancelCustomerSubscription(customerIdOrPhone: string) {
+  try {
+    const clean = customerIdOrPhone.replace(/\D/g, "");
+    let query = client().from("customers").update({
+      status: "cancelled",
+      cancelled_at: new Date().toISOString(),
+    });
+
+    if (clean.length >= 7) {
+      query = query.ilike("phone_number", `%${clean.slice(-10)}%`);
+    } else {
+      query = query.eq("id", customerIdOrPhone);
+    }
+
+    const { error } = await query;
+    if (error) {
+      console.warn("Supabase cancelCustomerSubscription warning:", error.message);
+    }
+    return true;
+  } catch (err: any) {
+    console.warn("Supabase cancelCustomerSubscription exception:", err?.message);
+    return false;
+  }
+}
+
