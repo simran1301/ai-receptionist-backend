@@ -31,10 +31,31 @@ export async function provisionPhoneNumber(
     payload.numberDesiredAreaCode = "551";
   }
 
-  const res = await axios.post(
-    `${VAPI_BASE}/phone-number`,
-    payload,
-    { headers: authHeaders() }
-  );
-  return res.data.number as string;
+  try {
+    const res = await axios.post(
+      `${VAPI_BASE}/phone-number`,
+      payload,
+      { headers: authHeaders() }
+    );
+    return res.data.number as string;
+  } catch (err: any) {
+    // If buying an additional number requires a payment method, fallback to reassigning existing number
+    try {
+      const existing = await axios.get(`${VAPI_BASE}/phone-number`, {
+        headers: authHeaders(),
+      });
+      if (existing.data && existing.data.length > 0) {
+        const targetNumber = existing.data[0];
+        await axios.patch(
+          `${VAPI_BASE}/phone-number/${targetNumber.id}`,
+          { assistantId },
+          { headers: authHeaders() }
+        );
+        return targetNumber.number as string;
+      }
+    } catch (fallbackErr) {
+      console.error("Failed to reassign existing phone number:", fallbackErr);
+    }
+    throw err;
+  }
 }
