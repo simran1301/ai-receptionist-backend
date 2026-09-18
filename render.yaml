@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: ams-ai-receptionist-backend
+    runtime: node
+    plan: starter
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: PORT
+        value: 10000
+      - key: FRONTEND_ORIGIN
+        value: https://amstech.ai
+      - key: ONBOARD_API_KEY
+        value: ams_onboard_sec_a7f92b01c34e892d
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: VAPI_API_KEY
+        sync: false
+      - key: PUBLIC_SERVER_URL
+        sync: false
+      - key: SUPABASE_URL
+        value: https://nihaohcjulkmaahynftj.supabase.co
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
