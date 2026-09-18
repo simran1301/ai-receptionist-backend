@@ -135,10 +135,28 @@ app.post("/cancel-subscription/request", requireApiKey, async (req, res) => {
       console.warn("Failed to dispatch cancellation email via Google Apps Script:", mailErr.message);
     }
 
+    console.log(`
+=============================================================================
+[AI RECEPTIONIST CANCELLATION REQUEST RECEIVED]
+Client Organization: ${body.companyName}
+Manager Email:       ${body.managerEmail}
+Assigned Phone Line: ${body.phoneNumber}
+Reason:              ${body.reason}
+Notes:               ${body.notes || "None"}
+
+ONE-CLICK APPROVE LINK (Releases Vapi number & cancels subscription):
+${approveUrl}
+
+DECLINE LINK:
+${declineUrl}
+=============================================================================
+`);
+
     res.json({
       success: true,
       message: "Cancellation request submitted. An approval email has been sent to sales@amstech.ai.",
       status: "pending_approval",
+      approvalUrl: approveUrl,
     });
   } catch (err) {
     console.error("Error in /cancel-subscription/request:", err);
