@@ -7,7 +7,7 @@ import axios from "axios";
 import { scrapeSiteText } from "./scan";
 import { extractReceptionistProfile } from "./extractProfile";
 import { buildVapiAssistantConfig } from "./promptBuilder";
-import { createAssistant, provisionPhoneNumber, releasePhoneNumber, deleteAssistant } from "./vapiClient";
+import { createAssistant, provisionPhoneNumber, releasePhoneNumber, deleteAssistant, listPhoneNumbers } from "./vapiClient";
 import { saveCustomer, findCustomer, cancelCustomerSubscription } from "./db";
 import { handleFunctionCall, handleEndOfCall } from "./functions/handlers";
 import { OnboardResult, VapiWebhookMessage } from "./types";
@@ -60,6 +60,51 @@ const cancelRequestSchema = z.object({
 app.get("/health", (_req, res) => {
   res.json({ status: "healthy", service: "ai-receptionist-backend", timestamp: new Date().toISOString() });
 });
+
+// Live Subscription & Telephony Verification
+app.get("/subscription-status", async (req, res) => {
+  try {
+    const phone = String(req.query.phone || "");
+    const email = String(req.query.email || "");
+
+    // 1. Check active numbers on Vapi
+    const vapiNumbers = await listPhoneNumbers().catch(() => []);
+    const cleanTarget = phone.replace(/\D/g, "");
+    const matchedNumber = (vapiNumbers as any[]).find(
+      (n: any) => cleanTarget.length >= 7 && (n.number || "").replace(/\D/g, "").endsWith(cleanTarget.slice(-10))
+    );
+
+    // 2. Check Supabase customer record
+    const customer = await findCustomer({ phone }).catch(() => null);
+
+    // If customer marked cancelled or phone line no longer exists on Vapi
+    if (customer?.status === "cancelled" || (!matchedNumber && cleanTarget.length >= 7)) {
+      return res.json({
+        status: "cancelled",
+        hasActiveNumber: false,
+        phoneNumber: null,
+        message: "AI Receptionist subscription cancelled and carrier phone number released.",
+      });
+    }
+
+    if (matchedNumber) {
+      return res.json({
+        status: "active",
+        hasActiveNumber: true,
+        phoneNumber: matchedNumber.number,
+      });
+    }
+
+    res.json({
+      status: customer?.status || "none",
+      hasActiveNumber: false,
+      phoneNumber: null,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 
 // Step 2 of the "Scan Website" flow: given a company + URL, produce a live
 // voice receptionist with its own phone number.
