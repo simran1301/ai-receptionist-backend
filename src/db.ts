@@ -14,15 +14,21 @@ export async function saveCustomer(
   vapiAssistantId: string,
   phoneNumber: string
 ) {
-  const { error } = await client().from("customers").insert({
-    id: customerId,
-    company_name: profile.companyName,
-    website_url: profile.websiteUrl,
-    vapi_assistant_id: vapiAssistantId,
-    phone_number: phoneNumber,
-    profile: profile,
-  });
-  if (error) throw error;
+  try {
+    const { error } = await client().from("customers").insert({
+      id: customerId,
+      company_name: profile.companyName,
+      website_url: profile.websiteUrl,
+      vapi_assistant_id: vapiAssistantId,
+      phone_number: phoneNumber,
+      profile: profile,
+    });
+    if (error) {
+      console.warn("Supabase saveCustomer warning (run sql/schema.sql in Supabase):", error.message);
+    }
+  } catch (err: any) {
+    console.warn("Supabase saveCustomer exception:", err?.message);
+  }
 }
 
 export async function saveLead(

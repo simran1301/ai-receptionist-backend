@@ -56,7 +56,10 @@ app.post("/onboard", requireApiKey, async (req, res) => {
     const customerId = randomUUID();
     const assistantConfig = buildVapiAssistantConfig(profile, customerId, serverUrl);
     const vapiAssistantId = await createAssistant(assistantConfig);
-    const phoneNumber = await provisionPhoneNumber(vapiAssistantId);
+
+    const cleanDigits = body.escalationContact.replace(/\D/g, "");
+    const areaCode = cleanDigits.length >= 10 ? cleanDigits.slice(-10, -7) : "551";
+    const phoneNumber = await provisionPhoneNumber(vapiAssistantId, areaCode);
 
     await saveCustomer(customerId, profile, vapiAssistantId, phoneNumber);
 

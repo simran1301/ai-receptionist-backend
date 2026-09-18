@@ -95,7 +95,7 @@ export function buildVapiAssistantConfig(
   serverUrl: string
 ) {
   return {
-    name: `${profile.companyName} Receptionist`,
+    name: `${profile.companyName} Receptionist`.slice(0, 40),
     firstMessage: `Thanks for calling ${profile.companyName}, how can I help you today?`,
     metadata: { customerId },
     model: {
@@ -106,7 +106,7 @@ export function buildVapiAssistantConfig(
     },
     voice: {
       provider: "11labs",
-      voiceId: "rachel",
+      voiceId: "21m00Tcm4TlvDq8ikWAM",
     },
     serverUrl: `${serverUrl}/webhook/vapi`,
   };

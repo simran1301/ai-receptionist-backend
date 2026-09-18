@@ -20,10 +20,20 @@ export async function createAssistant(config: unknown): Promise<string> {
  * If you'd rather bring an existing Twilio number, use the
  * /phone-number/import endpoint instead — same shape, different body.
  */
-export async function provisionPhoneNumber(assistantId: string): Promise<string> {
+export async function provisionPhoneNumber(
+  assistantId: string,
+  areaCode?: string
+): Promise<string> {
+  const payload: Record<string, unknown> = { provider: "vapi", assistantId };
+  if (areaCode) {
+    payload.numberDesiredAreaCode = areaCode;
+  } else {
+    payload.numberDesiredAreaCode = "551";
+  }
+
   const res = await axios.post(
     `${VAPI_BASE}/phone-number`,
-    { provider: "vapi", assistantId },
+    payload,
     { headers: authHeaders() }
   );
   return res.data.number as string;
