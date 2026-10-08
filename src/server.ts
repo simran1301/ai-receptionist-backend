@@ -1,7 +1,7 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
-import { randomUUID, createHmac } from "crypto";
+import { randomUUID, createHmac, timingSafeEqual } from "crypto";
 import { z } from "zod";
 import axios from "axios";
 import { scrapeSiteText } from "./scan";
@@ -33,13 +33,25 @@ function requireApiKey(req: express.Request, res: express.Response, next: expres
 }
 
 function generateApprovalToken(phone: string, email: string): string {
-  const secret = process.env.ONBOARD_API_KEY || "ams_cancellation_secret";
+  const secret = process.env.ONBOARD_API_KEY;
+  if (!secret) throw new Error("ONBOARD_API_KEY is not set");
   return createHmac("sha256", secret).update(`${phone}:${email}`).digest("hex");
 }
 
 function verifyApprovalToken(token: string, phone: string, email: string): boolean {
-  const expected = generateApprovalToken(phone, email);
-  return token === expected;
+  if (!token || !phone || !email || !process.env.ONBOARD_API_KEY) return false;
+  const expected = Buffer.from(generateApprovalToken(phone, email), "hex");
+  const given = Buffer.from(token, "hex");
+  return given.length === expected.length && timingSafeEqual(given, expected);
+}
+
+/** Values shown on the approval pages come from the link, so they are escaped. */
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] as string);
+}
+
+function forbiddenPage(res: express.Response) {
+  return res.status(403).send("<h3>This approval link is not valid. Use the link from the approval email.</h3>");
 }
 
 const onboardSchema = z.object({
@@ -214,9 +226,11 @@ ${declineUrl}
 app.get("/cancel-subscription/approve", async (req, res) => {
   try {
     const token = String(req.query.token || "");
-    const phone = String(req.query.phone || "+15514441061");
-    const email = String(req.query.email || "sales@amstech.ai");
-    const org = String(req.query.org || "AMS Client");
+    const phone = String(req.query.phone || "");
+    const email = String(req.query.email || "");
+    const org = String(req.query.org || "");
+    // Releasing a number is irreversible: only a link signed for this exact phone and email may do it.
+    if (!verifyApprovalToken(token, phone, email)) return forbiddenPage(res);
 
     // 1. Find customer record to get assistant ID
     const customer = await findCustomer({ phone, companyName: org });
@@ -286,9 +300,9 @@ app.get("/cancel-subscription/approve", async (req, res) => {
           <p>The AI Receptionist subscription has been successfully terminated and the provisioned telephone line has been released back to the telecom carrier pool.</p>
           
           <div class="details">
-            <div class="row"><span class="label">Organization:</span><span class="val">${org}</span></div>
-            <div class="row"><span class="label">Manager Email:</span><span class="val">${email}</span></div>
-            <div class="row"><span class="label">Released Phone DID:</span><span class="val" style="color: #F87171;">${phone}</span></div>
+            <div class="row"><span class="label">Organization:</span><span class="val">${escapeHtml(org)}</span></div>
+            <div class="row"><span class="label">Manager Email:</span><span class="val">${escapeHtml(email)}</span></div>
+            <div class="row"><span class="label">Released Phone DID:</span><span class="val" style="color: #F87171;">${escapeHtml(phone)}</span></div>
             <div class="row"><span class="label">Carrier Status:</span><span class="val" style="color: #34D399;">RELEASED / DELETED</span></div>
             <div class="row"><span class="label">Service Status:</span><span class="status-tag">CANCELLED</span></div>
           </div>
@@ -302,13 +316,17 @@ app.get("/cancel-subscription/approve", async (req, res) => {
     `);
   } catch (err) {
     console.error("Error in /cancel-subscription/approve:", err);
-    res.status(500).send(`<h3>Error approving cancellation: ${(err as Error).message}</h3>`);
+    res.status(500).send("<h3>Something went wrong approving this cancellation. Check the server logs.</h3>");
   }
 });
 
 // Decline Cancellation Handler
 app.get("/cancel-subscription/decline", (req, res) => {
-  const org = String(req.query.org || "Client");
+  const token = String(req.query.token || "");
+  const phone = String(req.query.phone || "");
+  const email = String(req.query.email || "");
+  if (!verifyApprovalToken(token, phone, email)) return forbiddenPage(res);
+  const org = escapeHtml(String(req.query.org || "Client"));
   res.send(`
     <!DOCTYPE html>
     <html>

@@ -16,9 +16,8 @@ export async function createAssistant(config: unknown): Promise<string> {
 }
 
 /**
- * Buys a phone number from Vapi and attaches it to the assistant.
- * If you'd rather bring an existing Twilio number, use the
- * /phone-number/import endpoint instead — same shape, different body.
+ * Buys a phone number from Vapi and attaches it to the assistant. Throws if the purchase fails;
+ * it never takes over a number that already exists in the account.
  */
 export async function provisionPhoneNumber(
   assistantId: string,
@@ -31,33 +30,11 @@ export async function provisionPhoneNumber(
     payload.numberDesiredAreaCode = "551";
   }
 
-  try {
-    const res = await axios.post(
-      `${VAPI_BASE}/phone-number`,
-      payload,
-      { headers: authHeaders() }
-    );
-    return res.data.number as string;
-  } catch (err: any) {
-    // If buying an additional number requires a payment method, fallback to reassigning existing number
-    try {
-      const existing = await axios.get(`${VAPI_BASE}/phone-number`, {
-        headers: authHeaders(),
-      });
-      if (existing.data && existing.data.length > 0) {
-        const targetNumber = existing.data[0];
-        await axios.patch(
-          `${VAPI_BASE}/phone-number/${targetNumber.id}`,
-          { assistantId },
-          { headers: authHeaders() }
-        );
-        return targetNumber.number as string;
-      }
-    } catch (fallbackErr) {
-      console.error("Failed to reassign existing phone number:", fallbackErr);
-    }
-    throw err;
-  }
+  // Never fall back to reassigning an existing number: that would move another customer's live line
+  // to this assistant. If buying fails (for example the account's free-number allowance is used up),
+  // the caller gets the error and a person decides what to do.
+  const res = await axios.post(`${VAPI_BASE}/phone-number`, payload, { headers: authHeaders() });
+  return res.data.number as string;
 }
 
 /**
